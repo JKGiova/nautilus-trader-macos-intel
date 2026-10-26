@@ -4,16 +4,26 @@ Community build of [NautilusTrader 1.231.0](https://github.com/nautechsystems/na
 for **x86_64 Intel macOS**, using the unmodified trading engine and high-precision mode.
 This repository contains build tooling, not a fork of the engine.
 
+## Verified build
+
+The initial build contains the **Python 3.14 wheel**, compiled and tested on **Intel macOS 26.5.1**
+with CPython 3.14.7. Binary architecture/deployment checks, a clean offline install,
+`pip check`, Parquet write/read, and an offline backtest passed.
+Python 3.12 and 3.13 are configured build options; their wheels have not yet been built or tested.
+GitHub-hosted validation is blocked by the account billing/spending limit, so macOS 15
+runtime tests have not run. macOS 13/14/15 remain compatibility targets only.
+
 ## Compatibility
 
 | macOS | Target | Validation |
 | --- | --- | --- |
-| 26 Tahoe | Yes | GitHub Intel runtime job |
-| 15 Sequoia | Yes | GitHub Intel build and runtime jobs |
+| 26 Tahoe | Yes | Passed locally on 26.5.1, Python 3.14.7 |
+| 15 Sequoia | Yes | Runtime unverified; GitHub Intel jobs configured |
 | 14 Sonoma | Yes | Binary deployment audit and dependency resolution; runtime unverified |
 | 13 Ventura | Yes, minimum | Binary deployment audit and dependency resolution; runtime unverified |
 
-Python **3.12, 3.13, and 3.14**, standard CPython, have separate wheels.
+Python **3.12, 3.13, and 3.14**, standard CPython, are separate build configurations.
+Only the Python 3.14 wheel has been verified locally.
 Free-threaded Python and Apple Silicon are not covered.
 The workflow must finish successfully before a build is considered verified;
 a compatibility target alone does not prove execution on that OS.
@@ -28,13 +38,13 @@ They are not upstream-supported Intel releases.
 Get the wheel and matching `runtime-cp312.txt`, `runtime-cp313.txt`, or
 `runtime-cp314.txt` from a successful [Actions run](https://github.com/JKGiova/nautilus-trader-macos-intel/actions/workflows/build.yml)
 or the repository's Releases page. Draft releases are visible to repository collaborators.
-For example, after downloading the Python 3.13 wheel and constraints into the current directory:
+For example, after downloading the Python 3.14 wheel and constraints into the current directory:
 
 ```bash
-python3.13 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install --only-binary=:all: -c runtime-cp313.txt ./nautilus_trader-1.231.0-cp313-cp313-macosx_13_0_x86_64.whl
+python -m pip install --only-binary=:all: -c runtime-cp314.txt ./nautilus_trader-1.231.0-cp314-cp314-macosx_13_0_x86_64.whl
 python -m pip check
 python -c 'import nautilus_trader; print(nautilus_trader.__version__)'
 ```
@@ -68,6 +78,9 @@ Outputs go to `dist/cp313/` (or the matching Python ABI directory).
 A repeated build deliberately refuses to reuse a modified source checkout;
 supply `--work-dir /path/to/fresh-build` and move old `dist/cp313/` outputs first.
 
+To repeat the audit and runtime checks for an already repaired wheel, use
+`python3.14 scripts/build.py --verify-only`.
+
 The build verifies the release tag's commit, preserves Cargo.lock with `--locked`,
 resolves binary runtime dependencies for macOS 13 before compiling, repairs shared-library
 dependencies with delocate, checks every Mach-O binary's architecture and minimum OS,
@@ -85,6 +98,8 @@ then test the same artifacts on `macos-15-intel` and `macos-26-intel`.
 These labels are explicit: `macos-latest` can select Apple Silicon.
 The workflow's manual `draft_release` input creates a draft release only after every
 build and test succeeds. It never publishes a release automatically.
+A maintainer can package locally verified outputs using `python3 scripts/release.py --local`;
+this creates a draft and explicitly records the narrower local validation.
 No PyPI credentials or trading credentials are needed.
 Private repositories consume the account's available GitHub Actions minutes.
 

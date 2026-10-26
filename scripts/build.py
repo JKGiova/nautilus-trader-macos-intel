@@ -40,6 +40,7 @@ def patch_build(source, rust):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, default=ROOT / ".build")
+    parser.add_argument("--verify-only", action="store_true", help="Recheck an existing repaired wheel without rebuilding")
     args = parser.parse_args()
     cfg = json.loads((ROOT / "upstream.json").read_text())
     pyver = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -53,21 +54,24 @@ def main():
     capnp = subprocess.check_output(["capnp", "--version"], text=True).strip()
     if capnp.split()[-1] != cfg["capnp"]:
         raise SystemExit(f"Expected Cap'n Proto {cfg['capnp']}, got {capnp}")
-    run("rustup", "toolchain", "install", cfg["rust"], "--profile", "minimal",
-        "--target", "x86_64-apple-darwin")
+    if not args.verify_only:
+        run("rustup", "toolchain", "install", cfg["rust"], "--profile", "minimal",
+            "--target", "x86_64-apple-darwin")
     work = args.work_dir.resolve() / f"cp{pyver.replace('.', '')}"
     work.mkdir(parents=True, exist_ok=True)
     source = work / "source"
-    if source.exists():
-        raise SystemExit(f"{source} already exists; use a fresh --work-dir.")
-    run("git", "clone", "--depth", "1", "--branch", cfg["tag"], cfg["repository"], source)
+    if not args.verify_only:
+        if source.exists():
+            raise SystemExit(f"{source} already exists; use a fresh --work-dir.")
+        run("git", "clone", "--depth", "1", "--branch", cfg["tag"], cfg["repository"], source)
     actual = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
     if actual != cfg["commit"]:
         raise SystemExit(f"Upstream tag moved: expected {cfg['commit']}, got {actual}")
     metadata = tomllib.loads((source / "pyproject.toml").read_text())
     if metadata["project"]["version"] != cfg["version"]:
         raise SystemExit("Upstream package version does not match upstream.json")
-    patch_build(source, cfg["rust"])
+    if not args.verify_only:
+        patch_build(source, cfg["rust"])
     # Never inherit native CPU optimizations or a higher host deployment target.
     env = os.environ.copy()
     for key in ("CARGO_ENCODED_RUSTFLAGS", "PYO3_ONLY", "PROFILE_MODE", "ANNOTATION_MODE",
@@ -88,34 +92,37 @@ def main():
         "COPY_TO_SOURCE": "true", "PARALLEL_BUILD": "false",
         "CARGO_BUILD_JOBS": "2",
     })
-    run(sys.executable, "-m", "venv", work / "build-env")
+    if not args.verify_only:
+        run(sys.executable, "-m", "venv", work / "build-env")
     python = work / "build-env/bin/python"
     env["PYO3_PYTHON"] = str(python)
     env["PATH"] = str(python.parent) + os.pathsep + env["PATH"]
-    # Explicit build environment also supplies packaging, imported by upstream build.py.
-    run(python, "-m", "pip", "install", "--upgrade", "pip", env=env)
-    run(python, "-m", "pip", "install", "build", "packaging", "delocate",
-        *metadata["build-system"]["requires"], env=env)
     wheelhouse = work / "runtime-wheels"
-    requirements = work / "runtime.in"
-    requirements.write_text("\n".join(metadata["project"]["dependencies"]) + "\n")
-    # Resolve the entire runtime for the OLDEST target before spending time compiling.
-    run(python, "-m", "pip", "download", "--only-binary=:all:",
-        "--platform", "macosx_13_0_x86_64", "--python-version", pyver,
-        "--implementation", "cp", "--abi", f"cp{pyver.replace('.', '')}",
-        "--dest", wheelhouse, "-r", requirements, env=env)
     raw = work / "raw"
-    run(python, "-m", "build", "--wheel", "--no-isolation", "--outdir", raw, source, env=env)
-    wheels = list(raw.glob("*.whl"))
-    if len(wheels) != 1:
-        raise SystemExit("Expected exactly one built wheel")
+    if not args.verify_only:
+        # Explicit build environment also supplies packaging, imported by upstream build.py.
+        run(python, "-m", "pip", "install", "--upgrade", "pip", env=env)
+        run(python, "-m", "pip", "install", "build", "packaging", "delocate",
+            *metadata["build-system"]["requires"], env=env)
+        requirements = work / "runtime.in"
+        requirements.write_text("\n".join(metadata["project"]["dependencies"]) + "\n")
+        # Resolve the entire runtime for the OLDEST target before spending time compiling.
+        run(python, "-m", "pip", "download", "--only-binary=:all:",
+            "--platform", "macosx_13_0_x86_64", "--python-version", pyver,
+            "--implementation", "cp", "--abi", f"cp{pyver.replace('.', '')}",
+            "--dest", wheelhouse, "-r", requirements, env=env)
+        run(python, "-m", "build", "--wheel", "--no-isolation", "--outdir", raw, source, env=env)
+        wheels = list(raw.glob("*.whl"))
+        if len(wheels) != 1:
+            raise SystemExit("Expected exactly one built wheel")
     output = ROOT / "dist" / f"cp{pyver.replace('.', '')}"
     output.mkdir(parents=True, exist_ok=True)
-    if list(output.glob("*.whl")):
-        raise SystemExit(f"Refusing to mix outputs with an existing wheel in {output}")
-    run(python.parent / "delocate-wheel", "--require-archs", "x86_64",
-        "--require-target-macos-version", cfg["deployment_target"],
-        "-w", output, wheels[0], env=env)
+    if not args.verify_only:
+        if list(output.glob("*.whl")):
+            raise SystemExit(f"Refusing to mix outputs with an existing wheel in {output}")
+        run(python.parent / "delocate-wheel", "--require-archs", "x86_64",
+            "--require-target-macos-version", cfg["deployment_target"],
+            "-w", output, wheels[0], env=env)
     wheel, = output.glob("*.whl")
     run(python, ROOT / "scripts/audit_wheel.py", wheel, env=env)
     run(sys.executable, "-m", "venv", work / "test-env")

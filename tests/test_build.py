@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,6 +43,9 @@ class BuildTests(unittest.TestCase):
 cmd LC_BUILD_VERSION
 minos 13.0
 sdk 26.0
+ntools 1
+tool LD
+version 1267.0
 Load command 1
 cmd LC_LOAD_DYLIB
 current version 999.0.0
@@ -51,6 +55,29 @@ version 12.0
 sdk 15.0
 """
         self.assertEqual(audit.minimum_versions(text), [(13, 0), (12, 0)])
+
+    def test_binary_rejects_arm64(self):
+        audit = load("audit_wheel")
+        with patch.object(audit.subprocess, "check_output", return_value="arm64"):
+            with self.assertRaisesRegex(ValueError, "architectures"):
+                audit.check_binary(Path("module.so"))
+
+    def test_binary_rejects_newer_deployment_target(self):
+        audit = load("audit_wheel")
+        with patch.object(audit.subprocess, "check_output", side_effect=[
+            "x86_64", "Load command 0\ncmd LC_BUILD_VERSION\nminos 14.0\nsdk 26.0"
+        ]):
+            with self.assertRaisesRegex(ValueError, "exceeds"):
+                audit.check_binary(Path("module.so"))
+
+    def test_binary_rejects_homebrew_linkage(self):
+        audit = load("audit_wheel")
+        with patch.object(audit.subprocess, "check_output", side_effect=[
+            "x86_64", "Load command 0\ncmd LC_BUILD_VERSION\nminos 13.0\nsdk 26.0",
+            "module.so:\n /usr/local/opt/example/lib/libexample.dylib (compatibility version 1.0.0)"
+        ]):
+            with self.assertRaisesRegex(ValueError, "external library"):
+                audit.check_binary(Path("module.so"))
 
 
 if __name__ == "__main__":
