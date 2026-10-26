@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,8 +55,9 @@ def main():
     if not wheels:
         raise SystemExit("No verified wheels to release")
     source = out / f"nautilus_trader-{cfg['version']}.tar.gz"
-    with urllib.request.urlopen(cfg["sdist_url"], timeout=120) as response:
-        source.write_bytes(response.read())
+    subprocess.run(["curl", "--fail", "--location", "--retry", "3",
+                    "--connect-timeout", "20", "--max-time", "300",
+                    "--proto", "=https", "--output", str(source), cfg["sdist_url"]], check=True)
     if hashlib.sha256(source.read_bytes()).hexdigest() != cfg["sdist_sha256"]:
         raise SystemExit("Upstream source checksum mismatch")
     shutil.copy(ROOT / "upstream.json", out)
@@ -67,7 +67,8 @@ def main():
     assets.append(out / "SHA256SUMS")
     notes = out.parent / "release-notes.md"
     validation = (
-        "Locally verified on Intel macOS 26.5.1 with Python 3.14.7. "
+        "Local runtime validation: " + " ".join(
+            p.read_text().strip() for p in sorted(out.glob("validation-local-*.txt"))) + ". "
         "GitHub Actions could not run because of the account billing/spending-limit block. "
         "Python 3.12/3.13 builds are configured but are not included or validated in this release. "
         "macOS 13/14/15 are compatibility targets, not runtime-tested platforms."

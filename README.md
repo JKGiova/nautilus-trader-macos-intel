@@ -25,9 +25,9 @@ runtime tests have not run. macOS 13/14/15 remain compatibility targets only.
 Python **3.12, 3.13, and 3.14**, standard CPython, are separate build configurations.
 Only the Python 3.14 wheel has been verified locally.
 Free-threaded Python and Apple Silicon are not covered.
-The workflow must finish successfully before a build is considered verified;
-a compatibility target alone does not prove execution on that OS.
-See each run's validation artifacts for actual results.
+The full CI matrix is verified only after the workflow succeeds.
+Local validation covers the tested machine; a compatibility target alone does not
+prove execution on that OS. See release reports and workflow artifacts for actual results.
 
 Upstream distributes macOS ARM64 wheels. These builds use explicit x86_64 compiler
 targets, a generic x86-64 CPU baseline, and `MACOSX_DEPLOYMENT_TARGET=13.0`.
