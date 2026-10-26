@@ -1,0 +1,117 @@
+name: Intel macOS wheels
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      draft_release:
+        description: Attach verified wheels to a draft GitHub release
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intel-wheels-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m unittest discover -s tests -v
+      - run: bash -n scripts/bootstrap.sh
+
+  build:
+    needs: checks
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+      - name: Install isolated build tools
+        run: bash scripts/bootstrap.sh
+      - name: Build and verify wheel targeting macOS 13+
+        run: |
+          source .build/tools/env.sh
+          python scripts/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: intel-cp-${{ matrix.python }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  test:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15-intel, macos-26-intel]
+        python: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: intel-cp-${{ matrix.python }}
+          path: dist
+      - name: Install in clean environment with tested dependency versions
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --only-binary=:all: -c dist/*/runtime-*.txt dist/*/*.whl
+          .venv/bin/python -m pip check
+          .venv/bin/python scripts/audit_wheel.py dist/*/*.whl
+          .venv/bin/python scripts/smoke_test.py
+      - name: Record platform validation
+        run: |
+          mkdir -p validation
+          .venv/bin/python scripts/smoke_test.py > validation/${{ matrix.os }}-py${{ matrix.python }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ matrix.os }}-${{ matrix.python }}
+          path: validation/
+          retention-days: 30
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.draft_release && github.ref == 'refs/heads/main'
+    needs: [build, test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: intel-cp-*
+          path: release
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: validation-*
+          path: release/validation
+          merge-multiple: true
+      - name: Assemble source, checksums, and draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/release.py

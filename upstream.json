@@ -1,0 +1,16 @@
+{
+  "version": "1.231.0",
+  "tag": "v1.231.0",
+  "repository": "https://github.com/nautechsystems/nautilus_trader.git",
+  "commit": "27a8e54e7ac3c57d6cbf8891f0283dfbaee97317",
+  "rust": "1.97.1",
+  "capnp": "1.5.0",
+  "deployment_target": "13.0",
+  "python_versions": [
+    "3.12",
+    "3.13",
+    "3.14"
+  ],
+  "sdist_url": "https://files.pythonhosted.org/packages/22/b7/a899df9daa2d84b9bb546a982b951f9336c814014c8545466d3eb138993b/nautilus_trader-1.231.0.tar.gz",
+  "sdist_sha256": "142dde40e77339745aa5fe6bcbb3de5624cee087f526879da00f127df077530f"
+}
