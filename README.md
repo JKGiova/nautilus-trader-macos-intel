@@ -4,6 +4,12 @@ Community build of [NautilusTrader 1.231.0](https://github.com/nautechsystems/na
 for **x86_64 Intel macOS**, using the unmodified trading engine and high-precision mode.
 This repository contains build tooling, not a fork of the engine.
 
+## Version policy
+
+This project stays on **NautilusTrader v1**, pinned to **1.231.0** and the exact
+upstream commit in `upstream.json`. Builds use that release tag rather than the
+moving upstream `master` branch. Moving to v2 requires a separate, explicit decision.
+
 ## Verified build
 
 The initial build contains the **Python 3.14 wheel**, compiled and tested on **Intel macOS 26.5.1**
@@ -107,7 +113,9 @@ Private repositories consume the account's available GitHub Actions minutes.
 
 Check [PyPI](https://pypi.org/project/nautilus_trader/) and the
 [upstream latest release](https://github.com/nautechsystems/nautilus_trader/releases/latest).
-Update `upstream.json` with the exact stable tag, dereferenced commit, tool versions,
+Keep updates on the v1 release line. Do not switch to upstream `master` or a v2
+release candidate as part of a routine update.
+Update `upstream.json` with the exact v1 release tag, dereferenced commit, tool versions,
 and PyPI source archive digest. Review upstream build.py, dependencies, Python versions,
 the audit filename check, smoke-test default, bootstrap Cap'n Proto version, and workflow matrix.
 Run `python3 -m unittest discover -s tests -v`, then the complete macOS build matrix.

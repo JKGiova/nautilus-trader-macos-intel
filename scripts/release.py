@@ -78,6 +78,8 @@ def main():
     )
     notes.write_text(
         f"Intel x86_64 wheels for NautilusTrader {cfg['version']}.\n\n"
+        "This project remains on the pinned NautilusTrader v1 release line. "
+        "A move to v2 requires a separate decision.\n\n"
         f"{validation}\n\n"
         "The binaries target macOS 13+ and use the generic x86-64 CPU baseline. "
         "The native architecture/deployment audit, clean install, pip check, "
